@@ -38,7 +38,7 @@ def make_arfs(input_evtfile,output_path=None,x_lo=None, x_hi=None, y=None,downsa
         x_lo=0
     if not x_hi:
         x_hi=x_len-downsample
-    if not y:
+    if y is None:
         y=range(0,y_len - downsample,downsample)
     else:
         y=[y]
@@ -72,9 +72,10 @@ def make_arfs(input_evtfile,output_path=None,x_lo=None, x_hi=None, y=None,downsa
             hdul.writeto(filepath+"mask_temporary_"+str(j)+"_"+str(i)+"_"+str(tm)+".fits.gz",overwrite=True)
 
             # extract one-pixel-ARF:
-            cmd=["srctool", "eventfiles="+input_evtfile, "exttype=tophat", "srccoord=fk5;circle("+str(coord_arr[int(i+downsample/2),int(j+downsample/2),0])+","+str(coord_arr[int(i+downsample/2),int(j+downsample/2),1])+","+str(pixel_rad)+")","srcreg= mask "+filepath+"mask_temporary_"+str(j)+"_"+str(i)+"_"+str(tm)+".fits.gz", "todo= ARF", "insts="+str(tm), "writeinsts="+str(tm),"psftype=NONE", "prefix="+filepath, "xgrid=0.25", "clobber=yes", "extpars="+str(3600*pixel_rad),"suffix= _"+str(j)+"_"+str(i)+"_"+str(tm)]
+            cmd=["srctool", "eventfiles="+input_evtfile, "exttype=tophat", "srccoord=fk5;circle("+str(coord_arr[int(i+downsample/2),int(j+downsample/2),0])+","+str(coord_arr[int(i+downsample/2),int(j+downsample/2),1])+","+str(pixel_rad)+")","srcreg= mask "+filepath+"mask_temporary_"+str(j)+"_"+str(i)+"_"+str(tm)+".fits.gz", "todo= ARF", "insts="+str(tm), "writeinsts="+str(tm),"psftype=NONE", "prefix="+filepath, "xgrid=0.5", "clobber=yes", "extpars="+str(3600*pixel_rad),"suffix= _"+str(j)+"_"+str(i)+"_"+str(tm)]
                 #xgrid originally 0.5
-            subprocess.check_call(cmd)
+            #print(cmd)
+            subprocess.run(cmd)
 
             # remove temporary mask
             os.remove(filepath+"mask_temporary_"+str(j)+"_"+str(i)+"_"+str(tm)+".fits.gz")
@@ -86,7 +87,7 @@ if __name__=="__main__":
     parser.add_argument("--output_path", required=False, type=str, help="Filepath for output files")
     parser.add_argument("--x_lo", required=False, type=int, help="Lower bound of cols analyzed in this step")
     parser.add_argument("--x_hi", required=False, type=int, help="Lower bound of cols analyzed in this step")
-    parser.add_argument("--y", required=False, type=int, help="Upper bound of rows analyzed in this step")
+    parser.add_argument("--y", required=False, type=int, help="Row analyzed in this step")
     parser.add_argument("--downsample", required=False, type=int, help="Bin parameter. 2 means the map is binned in steps of 2x2=4 pixels.")
     parser.add_argument("--tm", required=False, type=int, help="TM to analyze. Choose 1, 2, 3, 4, or 6.")
 

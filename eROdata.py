@@ -3,7 +3,7 @@ from make_exposure_1 import *
 from make_exposure_2 import *
 from SherpaSpectralModel import *
 
-from SkyModel_unit_fix import *
+#from SkyModel_unit_fix import *
 
 import gammapy
 from astropy.io import fits
@@ -84,6 +84,7 @@ def Evtfile_converter(evtfile,TM, add_pointing=None, suffix=None):
     # get average deadtime correction & write in header
     hdu2=hdulist["DEADCOR"+str(TM)]
     dc=[hdu2.data[i][1] for i in range(len(hdu2.data))]
+    deadc=np.average(dc)
     hdu1.header["DEADC"]=deadc
 
     # write output
@@ -115,10 +116,14 @@ class eROdata:
     '''
     Container for creating eROSITA dataset in Gammapy.
     '''
-    def __init__(self,txt_file,reg_file,out_path,tms=[1,2,3,4,6],dr1=True):
+    def __init__(self,txt_file,reg_file,out_path,tms=[1,2,3,4,6],dr1=True,catalog_path=""):
         self.txt_file=txt_file
-        self.reg_file=reg_file
-        ds9_reg=open(reg_file,"r").read()
+        #allow for both region strings and region files
+        try:
+            ds9_reg=open(reg_file,"r").read()
+        except:
+            ds9_reg=reg_file
+        self.ds9_reg=ds9_reg
         self.reg_coords=[float(i) for i in ds9_reg.split("(")[1].split(")")[0].split(",")]
 
         self.region=Regions.parse(ds9_reg, format="ds9")[0]
@@ -129,13 +134,14 @@ class eROdata:
         self.out_path=out_path
         self.tms=tms
         self.dr1=dr1
+        self.catalog_path=catalog_path
 
     def get_eRASS1_point_src(self):
         try:
             ds9_reg=Regions.read(self.out_path+"point_src_list.reg", format='ds9')
             return ds9_reg
         except:
-            erass = Table(fits.open("eRASS1_Main/eRASS1_Main.v1.1.fits")[1].data)
+            erass = Table(fits.open(self.catalog_path+"eRASS1_Main.v1.1.fits")[1].data)
             catalog=SkyCoord(ra=erass["RA"].data*u.deg,dec=erass["DEC"].data*u.deg)
             c = SkyCoord(ra=[self.reg_coords[0]]*u.degree, dec=[self.reg_coords[1]]*u.degree)
             idx1, idx2, sep, dist=catalog.search_around_sky(c,self.reg_coords[2]*u.deg)
@@ -146,9 +152,10 @@ class eROdata:
     def eSASS_data_products(self):
         # generate eventfiles and expmaps for all TMs
         txt_file=self.txt_file
-        reg_file=self.reg_file
-        out_path=self.outpath
+        reg=self.ds9_reg
+        out_path=self.out_path
         self.evtfiles=[]
+        self.evtfiles_conv=[]
         self.expmaps=[]
 
         self.get_eRASS1_point_src()
@@ -161,17 +168,17 @@ class eROdata:
         x="auto"
         for n,i in enumerate(self.tms):
             self.evtfiles.append(out_path+"evt_TM"+str(i)+".fits")
-            cmd=["evtool", "eventfiles=@"+txt_file, "outfile= "+out_path+"evt_TM"+str(i)+".fits", "image=yes", "rebin=80","pattern=15", "size="+str(x), "gti=FLAREGTI", "center_position= auto","flag=0xc00f7f30","repair_gtis=yes","region="+reg_file,"telid="+str(i)]
+            cmd=["evtool", "eventfiles=@"+txt_file, "outfile= "+out_path+"evt_TM"+str(i)+".fits", "image=yes", "rebin=80","pattern=15", "size="+str(x), "gti=FLAREGTI", "center_position= auto","flag=0xc00f7f30","repair_gtis=yes","region="+reg,"telid="+str(i)]
             subprocess.run(cmd)
             if n==0:
                 hdu = fits.open(out_path+"evt_TM"+str(i)+".fits")[0]
                 img=hdu.data
                 x=max(img.shape[0],img.shape[1])
                 x=round(x/10)*10
-                cmd=["evtool", "eventfiles=@"+txt_file, "outfile= "+out_path+"evt_TM"+str(i)+".fits", "image=yes", "rebin=80","pattern=15", "size="+str(x), "gti=FLAREGTI", "center_position= auto","flag=0xc00f7f30","repair_gtis=yes","region="+reg_file,"telid="+str(i)]
+                cmd=["evtool", "eventfiles=@"+txt_file, "outfile= "+out_path+"evt_TM"+str(i)+".fits", "image=yes", "rebin=80","pattern=15", "size="+str(x), "gti=FLAREGTI", "center_position= auto","flag=0xc00f7f30","repair_gtis=yes","region="+reg,"telid="+str(i)]
                 subprocess.run(cmd)
-            Evtfile_converter(self.evtfiles[i],val,pnt,suffix="_conv")
-            self.evtfiles_conv.append(self.evtfiles[i].replace(".fits","")+"_conv.fits")
+            Evtfile_converter(self.evtfiles[n],i,pnt,suffix="_conv")
+            self.evtfiles_conv.append(self.evtfiles[n].replace(".fits","")+"_conv.fits")
 
             
             self.expmaps.append(out_path+"expmap_TM"+str(i)+".fits")
@@ -254,7 +261,7 @@ class eROdata:
             obs.obs_id=val #needed for dataset creation
             
             #RMF
-            rmf = EDispKernel.read("/home/wecapstor1/caph/mppi147h/pwn_analysis/EDR_eROSITA_data/PSR1509-58/analysis_test/120_RMF_00001_conv.fits") # change to RMF provided with script!
+            rmf = EDispKernel.read("data/RMF_ARF/120_RMF_00001_conv.fits") # change to RMF provided with script!
             if e_reco_axis == "original":
                 energy_axis = MapAxis.from_edges(edges=rmf.axes["energy"].edges,unit="keV",name="energy",interp="log")
             if e_true_axis == "original":
@@ -278,11 +285,11 @@ class eROdata:
             if self.dr1:
                 obs.psf =PSFMap.read(self.psfmaps[i],hdu="PSF",format="gadf")
             else:
-                psf_kernel = PSF3D.read("PSF3D/PSFrad_TM"+str(val)+".fits",hdu='PSF', format='gadf-dl3')
+                psf_kernel = PSF3D.read("data/PSF/PSFrad_TM"+str(val)+".fits",hdu='PSF', format='gadf-dl3')
                 obs.psf=utils.make_psf_map(psf=psf_kernel,pointing=obs.pointing.fixed_icrs,geom=dataset_empty.psf.psf_map.geom,)
             
             #read in an unrelated Aeff for TELESCOP keyword
-            obs.aeff = RegionNDMap.read("/data/120_ARF_00001.fits", format="ogip-arf") #needed for TELESCOP keywords
+            obs.aeff = RegionNDMap.read("data/120_ARF_00001.fits", format="ogip-arf") #needed for TELESCOP keywords
             
             self.obs.append(obs)
             
@@ -608,8 +615,8 @@ def to_lin(self):
     
     return dataset_lin
 
-def get_eRASS1_point_src(self,coord,radius):
-    erass = Table(fits.open("eRASS1_Main/eRASS1_Main.v1.1.fits")[1].data)
+def get_eRASS1_point_src(self,coord,radius,catalog_path):
+    erass = Table(fits.open(catalog_path+"eRASS1_Main.v1.1.fits")[1].data)
     catalog=SkyCoord(ra=erass["RA"].data*u.deg,dec=erass["DEC"].data*u.deg)
     idx1, idx2, sep, dist=catalog.search_around_sky(coord,radius*u.deg)
     return Regions([CircleSkyRegion(center=i,radius=30*u.arcsec) for i in catalog[idx2]])

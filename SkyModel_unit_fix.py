@@ -1,6 +1,8 @@
 ## This is a very quick fix for a bug that was present before Gammapy v.2.0.1
 ## Redefine SkyModel init function
 from gammapy.utils.scripts import make_name
+from gammapy.modeling.models import SkyModel
+import gammapy
 
 def __init__2(
     self,

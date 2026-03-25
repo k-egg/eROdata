@@ -1,3 +1,7 @@
+from gammapy.modeling.models import SpectralModel, SkyModel, SPECTRAL_MODEL_REGISTRY
+from gammapy.modeling import Parameter, Parameters
+from astropy import units as u
+import numpy as np
 class SherpaSpectralModel(SpectralModel):
     """A wrapper for Sherpa spectral models.
 
@@ -34,13 +38,17 @@ class SherpaSpectralModel(SpectralModel):
             parameters.append(parameter)
         return Parameters(parameters)
 
-    def _update_sherpa_parameters(self, **kwargs):
+    def _update_sherpa_parameters(self, *args, **kwargs):
         """Update sherpa model parameters"""
-        for name, value in kwargs.items():
-            self.sherpa_model.pars[[x.name for x in self.sherpa_model.pars].index(name)].val=value
-            #setattr(self.sherpa_model, name, value)
+        if kwargs:
+            for name, value in kwargs.items():
+                self.sherpa_model.pars[[x.name for x in self.sherpa_model.pars].index(name)].val=value
+                #setattr(self.sherpa_model, name, value)
+        else:
+            for i, val in enumerate(args):
+                self.sherpa_model.pars[i].val=val
 
-    def evaluate(self, energy, **kwargs):
+    def evaluate(self, energy, *args, **kwargs):
         if not isinstance(energy, u.Quantity):
             raise ValueError("The energy must be a Quantity object.")
         else:
@@ -60,7 +68,11 @@ class SherpaSpectralModel(SpectralModel):
                 delta = (energy[idx + 2] - energy[idx + 1]) / 100
                 energy[idx + 1] += delta
 
-        self._update_sherpa_parameters(**kwargs)
+        if kwargs:
+            self._update_sherpa_parameters(**kwargs)
+        else:
+            self._update_sherpa_parameters(*args)
+            print(args)
 
         y_ = self.sherpa_model(energy)[:-1]
         if self.integrated:
@@ -69,3 +81,4 @@ class SherpaSpectralModel(SpectralModel):
 
         return y_.reshape(shape)
 
+SPECTRAL_MODEL_REGISTRY.append(SherpaSpectralModel)

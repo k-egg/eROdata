@@ -1,0 +1,176 @@
+#import sys  
+sys.path.insert(1, '/home/wecapstor1/caph/mppi147h/eROdata')
+#import eROdata
+from eROdata import *
+#import make_exposure_1
+#import make_exposure_2
+#import make_psfmap
+from config import *
+from astropy.io import fits
+#downsample = 2
+#tm=2
+
+#x = list(range(200,1000,downsample))
+#y = list(range(200,1000,downsample))
+
+#x_max = max(x)+downsample
+#x_min = min(x)
+
+#y_max=max(y)+downsample
+#y_min=min(y)
+
+#script_path="/home/wecapstor1/caph/mppi147h/pwn_analysis/scripts/"
+#data_path="/home/wecapstor1/caph/mppi147h/pwn_analysis/DR1_eROSITA_data/MSH15-52/data_products_new/"
+#ut_path="/home/wecapstor1/caph/mppi147h/pwn_analysis/DR1_eROSITA_data/MSH15-52/snakemake_arf/arfs_b"+str(downsample)+"_"+str(tm)+"/"
+
+#take from file later:
+
+#evtfile_list=#filepath to txt file
+#source_reg=#ds9 reg
+#backgr_reg=#ds9 reg, add warning if regs are not in data?
+#exclude_reg=#same
+#tms=[1,2,3,4,6]
+#stacked=True
+#dr1=False
+#out_path=
+#rest goes into config_file
+
+#this will be in config file later
+#evt_bin=8 #arcsec
+#exp_bin=32 #arcsec
+#psf_bin=80 #arcsec
+#srctool_like=False
+
+
+#create reg files & evtfile txtfiles & subdirectories & parameters:
+#out_path_src=out_path + "src/"
+#out_path_bkg=out_path + "bkg/"
+out_path_arf=out_path + "arf/"
+
+downsample_exp=int(exp_bin/4)
+downsample_psf=int(psf_bin/4)
+
+width=float(source_reg[source_reg.rfind(",")+1:source_reg.rfind(")")].strip())*2
+pix=int(width*3600/4)
+x_list=list(range(0,pix,downsample_exp))
+x_min=min(x_list)
+x_max=max(x_list)+downsample_exp
+y=x_list
+
+
+rule all:
+    input:
+        evtfile_conv=expand("{out_path}evt_TM{tm}_conv.fits",out_path=out_path,tm=tms),
+        exp_t_map=expand("{out_path}expmap_TM{tm}.fits",out_path=out_path,tm=tms),
+        expmap=expand("{out_path}quantized_arf_exp_b{downsample}_{tm}.fits.gz",out_path=out_path,downsample=downsample_exp,tm=tms),
+        psf_map=expand("{out_path}psfmap_{tm}.fits",out_path=out_path,tm=tms)
+    #expand("{out_path}120_ARF_00001_{x}_{y}_1.fits", out_path=out_path, x=x, y=y)
+    #expand("untest_{i}.txt", i=x)
+
+rule make_evtfiles_exp_t_maps:
+    output:
+        evtfile=expand("{out_path}evt_TM{tm}.fits",out_path=out_path,tm=tms),
+        evtfile_conv=expand("{out_path}evt_TM{tm}_conv.fits",out_path=out_path,tm=tms),
+        exp_t_map=expand("{out_path}expmap_TM{tm}.fits",out_path=out_path,tm=tms)
+    container:'docker://erosita/esass:latest'
+    conda:'gammapy.yaml'
+    resources:
+        runtime=20,
+        mem_mb=5000
+    run:
+        data_src=eROdata(evtfile_list,\
+                 source_reg,\
+                 out_path,tms=tms,dr1=dr1, catalog_path=catalog_path)
+        data_src.eSASS_data_products()
+
+#        with open(out_path+"pixel_number.txt","w") as f:
+#            f.write(str(astropy.io.fits.open(data_path+"evt_TM"+tms[0]+".fits")[0].data.shape[0]))
+#        data_bkg=eROdata(evtfile_list,\
+#                         backgr_reg,\
+#                         out_path_bkg,tms=tms,dr1=dr1)
+#        data_bkg.eSASS_data_products(self,tm=tms)
+#        data_bkg.convert_files(add_pointing=dr1)
+
+#def get_x_list():
+#    try:
+#       x=list(range(0,fits.open(out_path+"evt_TM"+str(tms[0])+".fits")[0].data.shape[0],downsample_exp))
+#    except:
+#        x=list()
+#    return x
+
+#wildcard_constraints:
+#    tm=tms,
+#    y = x_list
+
+rule make_arfs:
+    input:
+            expand("{out_path}evt_TM{{tm}}.fits",out_path=out_path)
+    output:
+        expand("{out_path}scratch/{{tm}}20_ARF_00001_{x}_{{y}}_{{tm}}.fits",out_path=out_path, x=x_list)
+    
+    wildcard_constraints:
+        tm=tms
+#        y in y
+    container: 'docker://erosita/esass:latest'
+    conda: 'gammapy.yaml'
+    resources:
+        runtime=120,
+        mem_mb=5000
+    shell:
+        '''
+        python3 {eROdata_path}make_exposure_1.py \
+        --input_evtfile={out_path}evt_TM{wildcards.tm}.fits \
+        --output_path={out_path}scratch/ \
+        --downsample={downsample_exp} \
+        --tm={wildcards.tm} \
+        --x_lo={x_min}\
+        --x_hi={x_max}\
+        --y={wildcards.y}
+        '''
+
+rule make_arf_map:
+    input:
+        #expand("{out_path}scratch/{{tm}}20_ARF_00001_{x}_{y}_{{tm}}.fits",out_path=out_path, x=x_list,y=x_list)
+        expand("{out_path}scratch/{{tm}}20_ARF_00001_{x}_{y}_{{tm}}.fits",out_path=out_path, x=x_list,y=x_list)
+    output:
+#        "{out_path}quantized_arf_b{downsample}_{tm}.fits.gz",
+        expand("{out_path}quantized_arf_exp_b{downsample}_{{tm}}.fits.gz", out_path=out_path, downsample=downsample_exp)
+    wildcard_constraints:
+        tm=tms
+    container: 'docker://erosita/esass:latest'
+    conda: 'gammapy.yaml'
+    resources:
+        runtime=120,
+        mem_mb=20000
+    shell:
+        '''
+        python3 {eROdata_path}make_exposure_2.py \
+        --input_evtfile={out_path}evt_TM{wildcards.tm}.fits \
+        --input_expmap={out_path}expmap_TM{wildcards.tm}.fits \
+        --arf_path={out_path}scratch/ \
+        --output_path={out_path} \
+        --downsample={downsample_exp} \
+        --tm={wildcards.tm} 
+        '''
+
+rule make_psf_map:
+    output:
+        expand("{out_path}psfmap_{{tm}}.fits" ,out_path=out_path,tm=tms)
+    input:
+        expand("{out_path}evt_TM{{tm}}.fits" ,out_path=out_path,tm=tms)
+    wildcard_constraints:
+        tm=tms
+    container: 'docker://erosita/esass:latest'
+    conda: 'gammapy.yaml'
+    resources:
+        runtime=180,
+        mem_mb=5000
+    shell:
+        '''
+        python3 {eROdata_path}make_psfmap.py \
+        --evtfile={out_path}evt_TM{wildcards.tm}.fits \
+        --tm={wildcards.tm} \
+        --outfile={out_path}psfmap_{wildcards.tm}.fits \
+        --downsample={downsample_psf}
+       '''
+    

@@ -2,7 +2,7 @@
 from astropy.io import fits
 from astropy import units as u
 from astropy.coordinates import SkyCoord
-from regions import SkyRegion
+#from regions import SkyRegion
 from astropy.table import Table
 from astropy.wcs import WCS
 from astropy.wcs import utils
@@ -82,7 +82,7 @@ def make_psfmap(evtfile,tm, outfile,downsample=1):
                     arr_a[j,k,5]+=1
     
     #open PSF file
-    hdul2=fits.open("/home/wecapstor1/caph/mppi147h/pwn_analysis/eROSITA_calib/PSF/PSFrad_TM"+str(tm)+"_100_new.fits")
+    hdul2=fits.open("data/PSF/PSFrad_TM"+str(tm)+".fits")
     x=np.array(hdul2[1].data.tolist()[0][6])
     b=hdul2[1].data.tolist()[0]
     rad_lo=np.array(b[4]*7)
