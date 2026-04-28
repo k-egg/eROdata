@@ -31,6 +31,7 @@ from os import path
 import os, os.path, time, subprocess
 from astropy.wcs import WCS
 import argparse
+from gammapy.maps.wcs.geom import get_resampled_wcs
 
 def make_psfmap(evtfile,tm, outfile,downsample=1):
     
@@ -40,9 +41,9 @@ def make_psfmap(evtfile,tm, outfile,downsample=1):
     hdul=fits.open(evtfile)
     P_table = np.array(hdul["CORRATT"+str(tm)].data.tolist())[:,1:3]
     
-    img_dim_x = hdul[0].shape[0]
-    img_dim_y = hdul[0].shape[1]
-    img_coord = WCS(hdul[0].header)
+    img_dim_x = int(hdul[0].shape[0]/downsample)
+    img_dim_y = int(hdul[0].shape[1]/downsample)
+    img_coord = get_resampled_wcs(WCS(hdul[0].header),downsample,True)
     
     
     #create array with skycoord for every pixel
@@ -59,7 +60,7 @@ def make_psfmap(evtfile,tm, outfile,downsample=1):
     arr_a=np.zeros((img_dim_y,img_dim_x,6))
     
     for i in range(len(P_table)):
-        print(i)
+        #print(i)
         p_coord=(P_table[i,0],P_table[i,1])#SkyCoord(P_table[i,0],P_table[i,1],unit="deg",frame="fk5")
         for j in range(img_dim_y):#len(coord_arr)):
             for k in range(img_dim_x):#len(coord_arr)):
@@ -82,7 +83,7 @@ def make_psfmap(evtfile,tm, outfile,downsample=1):
                     arr_a[j,k,5]+=1
     
     #open PSF file
-    hdul2=fits.open("data/PSF/PSFrad_TM"+str(tm)+".fits")
+    hdul2=fits.open("../data/PSF/PSFrad_TM"+str(tm)+".fits")
     x=np.array(hdul2[1].data.tolist()[0][6])
     b=hdul2[1].data.tolist()[0]
     rad_lo=np.array(b[4]*7)
@@ -95,7 +96,7 @@ def make_psfmap(evtfile,tm, outfile,downsample=1):
     
     
     #define output array
-    psf_map_arr=np.zeros((7,100,int(img_dim_y/downsample),int(img_dim_x/downsample)))
+    psf_map_arr=np.zeros((7,100,img_dim_y,img_dim_x))
     
     #average PSF curves in accordance to the distributions found in arr_a
     #divide arr_a through vignetting factors (outer FoV has less exposure and larger factor)
@@ -103,12 +104,12 @@ def make_psfmap(evtfile,tm, outfile,downsample=1):
     v_f=[1.01652741, 1.16308784, 1.45869291, 1.84955096, 2.36298895, 2.83500886]
     arr_a=np.divide(arr_a,v_f)
     
-    for i in range(0,img_dim_y,downsample):
-        for j in range(0,img_dim_x,downsample):
+    for i in range(0,img_dim_y):
+        for j in range(0,img_dim_x):
             for e in range(7):
                 try:
                     avg_psf=np.average(x[:,:,e],axis=1, weights=np.average(arr_a[i:i+downsample,j:j+downsample],axis=(0,1)))
-                    psf_map_arr[e,:,int(i/downsample),int(j/downsample)]=avg_psf
+                    psf_map_arr[e,:,i,j]=avg_psf
                 except:
                     pass
     #creating the output file:
@@ -140,9 +141,11 @@ def make_psfmap(evtfile,tm, outfile,downsample=1):
     hdu_psfmap.header["CDELT2"]=hdu_psfmap.header["CDELT2"]*downsample
     hdu_psfmap.header["CRPIX1"]=((hdu_psfmap.header["CRPIX1"]-0.5)/downsample)+0.5
     hdu_psfmap.header["CRPIX2"]=((hdu_psfmap.header["CRPIX2"]-0.5)/downsample)+0.5
-    hdu_psfmap.header["NAXIS1"]=hdu_psfmap.header["NAXIS1"]/downsample
-    hdu_psfmap.header["NAXIS2"]=hdu_psfmap.header["NAXIS2"]/downsample
-    hdu_psfmap.header['WCSSHAPE']='('+str(hdu_psfmap.header["NAXIS1"])+','+str(hdu_psfmap.header["NAXIS2"])+',100,7)'
+    #naxis1=hdu_psfmap.header["NAXIS1"]/downsample
+    #naxis2=hdu_psfmap.header["NAXIS2"]/downsample
+    #hdu_psfmap.header["NAXIS1"]=naxis1
+    #hdu_psfmap.header["NAXIS2"]=naxis2
+    #hdu_psfmap.header['WCSSHAPE']='('+str(naxis1)+','+str(naxis2)+',100,7)'
     
     #PSF Bands extension:
     col1=fits.Column(name='CHANNEL', format='K',array=range(len(rad_lo)))

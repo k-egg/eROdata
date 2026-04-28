@@ -14,7 +14,19 @@ x_min=min(x_list)
 x_max=max(x_list)+downsample_exp
 y=x_list
 
-#generate list of output files
+
+#function definitions
+
+def get_final_dataset_list():
+    l=[]
+    if output_stacked:
+        l.append(out_path+"dataset_stacked.fits.gz")
+    if output_tms:
+        l.extend([out_path+"dataset_TM"+str(i)+".fits.gz" for i in tms])
+    if not on_off:
+        l.extend([out_path+"background_TM"+str(i)+".fits.gz" for i in tms])
+    return l
+
 def get_output_list():
     l=[expand("{out_path}evt_TM{tm}_conv.fits",out_path=out_path,tm=tms),\
         expand("{out_path}expmap_TM{tm}.fits",out_path=out_path,tm=tms),\
@@ -29,11 +41,62 @@ def get_output_list():
 
 rule all:
     input:
+        get_final_dataset_list()
+    
+rule make_datasets:
+    input:
         get_output_list()
         #evtfile_conv=expand("{out_path}evt_TM{tm}_conv.fits",out_path=out_path,tm=tms),
         #exp_t_map=expand("{out_path}expmap_TM{tm}.fits",out_path=out_path,tm=tms),
         #expmap=expand("{out_path}quantized_arf_exp_b{downsample}_{tm}.fits.gz",out_path=out_path,downsample=downsample_exp,tm=tms),
         #psf_map=expand("{out_path}psfmap_{tm}.fits",out_path=out_path,tm=tms)
+    output:
+        get_final_dataset_list()
+    conda:'gammapy.yaml'
+    resources:
+        runtime=runtime_make_datasets,
+        mem_mb=mem_mb_make_datasets
+    run:
+        width_fg=Regions.parse(fg_reg, format="ds9")[0].radius.to(u.deg).value*2
+        width_bg=Regions.parse(bg_reg, format="ds9")[0].radius.to(u.deg).value*2
+
+        for i,val in enumerate(tms):
+            data_src=eROdata(evtfile_list,\
+                 bg_reg,\
+                 out_path,tms=[val], pointed=pointed, catalog_path=catalog_path)
+            data_src.find_data_products()
+            data_src.load_data(wid=width_bg,binsize=evt_bin,binsize_irf=binsize_irf, srctool_like=srctool_like)
+
+            #data_bkg=eROdata(evtfile_list,\
+            #     bg_reg,\
+            #     out_path,tms=[val],pointed=pointed, catalog_path=catalog_path)
+            #data_bkg.find_data_products()
+            #data_bkg.load_data(wid=width_bg,binsize=evt_bin,binsize_irf=binsize_irf, srctool_like=srctool_like)
+               
+            data_src.background_spectrum(data_src, data_src.region,ext_mask=bkg_ext_mask,to_mask_out=bkg_exclude_reg,on_off=on_off,exp=bkg_weighting_exp)
+            data_src.datasets[0] = data_src.datasets[0].cutout(data_src.region.center,width_fg*u.deg)
+
+            if output_stacked:
+                if i==0:
+                    stacked=data_src.datasets[0].copy()
+                    backgr_spec = data_src.backgr_spectra[0].copy()
+                if i >0:
+                    stacked.stack(data_src.datasets[0])
+                    backgr_spec.stack(data_src.backgr_spectra[0])
+                
+            if wstat_rebin_n:
+                data_src.datasets[0] = wstat_rebin(data_src.datasets[0],wstat_rebin_n)
+            data_src.datasets[0] = rebin_energy_bounds(data_src.datasets[0])
+            
+            if output_tms:
+                data_src.write_to_files(tms=[val],stacked=False)
+        if output_stacked:
+            data_src.stacked=stacked
+            data_src.backgr_stacked=backgr_spec
+            data_src.stacked = wstat_rebin(data_src.stacked,wstat_rebin_n)
+            data_src.stacked = rebin_energy_bounds(data_src.stacked)
+            data_src.write_to_files(tms=None,stacked=True)
+
 
 rule make_evtfiles_exp_t_maps:
     output:
@@ -43,8 +106,8 @@ rule make_evtfiles_exp_t_maps:
     container:'docker://erosita/esass:latest'
     conda:'gammapy.yaml'
     resources:
-        runtime=20,
-        mem_mb=5000
+        runtime=runtime_make_evtfiles,
+        mem_mb=mem_mb_make_evtfiles
     run:
         data_src=eROdata(evtfile_list,\
                  source_reg,\
@@ -62,8 +125,8 @@ rule make_arfs:
     container: 'docker://erosita/esass:latest'
     conda: 'gammapy.yaml'
     resources:
-        runtime=120,
-        mem_mb=5000
+        runtime=runtime_make_arfs,
+        mem_mb=mem_mb_make_arfs
     shell:
         '''
         python3 {eROdata_path}make_exposure_1.py \
@@ -86,8 +149,8 @@ rule make_arf_map:
     container: 'docker://erosita/esass:latest'
     conda: 'gammapy.yaml'
     resources:
-        runtime=120,
-        mem_mb=20000
+        runtime=runtime_make_arf_map,
+        mem_mb=mem_mb_make_arf_map
     shell:
         '''
         python3 {eROdata_path}make_exposure_2.py \
@@ -109,8 +172,8 @@ rule make_psf_map:
     container: 'docker://erosita/esass:latest'
     conda: 'gammapy.yaml'
     resources:
-        runtime=60,
-        mem_mb=5000
+        runtime=runtime_make_psf_map,
+        mem_mb=mem_mb_make_psf_map
     shell:
         '''
         python3 {eROdata_path}make_psfmap.py \

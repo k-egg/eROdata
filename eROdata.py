@@ -16,7 +16,7 @@ from regions import SkyRegion,RectangleSkyRegion, Regions, CircleSkyRegion, Elli
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from IPython.display import display
-from gammapy.data import EventList, Observation, GTI
+from gammapy.data import EventList, Observation, GTI, FixedPointingInfo
 from gammapy.datasets import Datasets, MapDataset, MapDatasetOnOff, SpectrumDatasetOnOff, SpectrumDataset
 from gammapy.irf import EDispKernelMap, PSFMap,EDispKernel, PSF3D
 from gammapy.maps import Map, MapAxis, WcsGeom,RegionNDMap,RegionGeom,MapAxes,WcsNDMap
@@ -37,6 +37,7 @@ from gammapy.modeling.models import (
     EBLAbsorptionNormSpectralModel,
     ConstantSpatialModel
 )
+from gammapy.utils.scripts import make_name, make_path
 import numpy as np
 from os import path
 import os, os.path, time, subprocess
@@ -116,7 +117,7 @@ class eROdata:
     '''
     Container for creating eROSITA dataset in Gammapy.
     '''
-    def __init__(self,txt_file,reg_file,out_path,tms=[1,2,3,4,6],dr1=True,catalog_path=""):
+    def __init__(self,txt_file,reg_file,out_path,tms=[1,2,3,4,6],pointed=False,catalog_path=""):
         self.txt_file=txt_file
         #allow for both region strings and region files
         try:
@@ -133,7 +134,7 @@ class eROdata:
             out_path=out_path+"/"
         self.out_path=out_path
         self.tms=tms
-        self.dr1=dr1
+        self.pointed=pointed
         self.catalog_path=catalog_path
 
     def get_eRASS1_point_src(self):
@@ -160,7 +161,7 @@ class eROdata:
 
         self.get_eRASS1_point_src()
 
-        if self.dr1:
+        if not self.pointed:
             pnt=self.reg_coords
         else:
             pnt=None
@@ -190,7 +191,7 @@ class eROdata:
         self.evtfiles=[]
         self.expmaps=[]
         self.q_arf=[]
-        if self.dr1:
+        if not self.pointed:
             self.psfmaps=[]
         self.evtfiles_conv=[]
         
@@ -209,7 +210,7 @@ class eROdata:
             if path.isfile(q_arf_map_path[0]):
                 self.q_arf.append(q_arf_map_path[0])
 
-            if self.dr1:
+            if not self.pointed:
                 if path.isfile(self.out_path+"psfmap_"+str(i)+".fits"):
                     self.psfmaps.append(self.out_path+"psfmap_"+str(i)+".fits")
             
@@ -228,14 +229,15 @@ class eROdata:
         
     def make_psf(self,downsample):
         self.psfmaps=[]
-        if not self.dr1:
+        if self.pointed:
             return "Pointed data, PSFMap creation not necessary."
-        for n,i in enumerate(self.tms):
-            make_psfmap(evtfile=self.evtfiles[n], tm=i, outfile=self.out_path+"psfmap_"+str(i)+".fits", downsample=downsample)
-            self.psfmaps.append(self.out_path+"psfmap_"+str(i)+".fits")
+        else:
+            for n,i in enumerate(self.tms):
+                make_psfmap(evtfile=self.evtfiles[n], tm=i, outfile=self.out_path+"psfmap_"+str(i)+".fits", downsample=downsample)
+                self.psfmaps.append(self.out_path+"psfmap_"+str(i)+".fits")
 
             
-    def load_data(self,onoff= True, wid=0.6,binsize=8,pointed=False,backgr_cen=None,backgr_wid=8,exclude_file=None,e_reco_axis="original",e_true_axis="original",geom_file=None,geom_file_cutout_cen=None,binsz_irf=3*u.arcmin,srctool_like=False):
+    def load_data(self,onoff= True, wid=0.6,binsize=8,e_reco_axis="original",e_true_axis="original",geom_file=None,geom_file_cutout_cen=None,binsize_irf=3,srctool_like=False):
         self.obs=[]
         self.datasets=[]
         self.binsize=binsize
@@ -259,9 +261,10 @@ class eROdata:
 
             obs = Observation(events=events,gti=gti)
             obs.obs_id=val #needed for dataset creation
+            obs._pointing=FixedPointingInfo(fixed_icrs=self.region.center.icrs)#v 2.0.1 needed for dataset creation
             
             #RMF
-            rmf = EDispKernel.read("data/RMF_ARF/120_RMF_00001_conv.fits") # change to RMF provided with script!
+            rmf = EDispKernel.read(os.path.dirname(os.path.abspath(__file__))+"/data/RMF_ARF/120_RMF_00001_conv.fits") # change to RMF provided with script!
             if e_reco_axis == "original":
                 energy_axis = MapAxis.from_edges(edges=rmf.axes["energy"].edges,unit="keV",name="energy",interp="log")
             if e_true_axis == "original":
@@ -279,25 +282,29 @@ class eROdata:
             else:
                 geom = WcsGeom.create(skydir=(self.reg_coords[0],self.reg_coords[1]),axes=[energy_axis],width=wid * u.deg,binsz=binsize * u.arcsec,frame="icrs")
             
-            dataset_empty = MapDatasetOnOff.create(geom=geom,energy_axis_true=e_true_axis,name="msh"+str(val),binsz_irf=binsz_irf)
+            dataset_empty = MapDatasetOnOff.create(geom=geom,energy_axis_true=e_true_axis,name="msh"+str(val),binsz_irf=(binsize_irf*u.arcmin).to("deg").value)
             
             #PSF
-            if self.dr1:
-                obs.psf =PSFMap.read(self.psfmaps[i],hdu="PSF",format="gadf")
+            if not self.pointed:
+                #hdulist=fits.open(self.psfmaps[i])
+                #hdulist[0].header["RADECSYS"]="ICRS"
+                #psf = PSFMap.from_hdulist(hdulist, hdu='PSF', format="gadf")
+                obs.psf = PSFMap.read(self.psfmaps[i],hdu="PSF",format="gadf")
+                #psf=None
             else:
-                psf_kernel = PSF3D.read("data/PSF/PSFrad_TM"+str(val)+".fits",hdu='PSF', format='gadf-dl3')
+                psf_kernel = PSF3D.read(os.path.dirname(os.path.abspath(__file__))+"/data/PSF/PSFrad_TM"+str(val)+".fits",hdu='PSF', format='gadf-dl3')
                 obs.psf=utils.make_psf_map(psf=psf_kernel,pointing=obs.pointing.fixed_icrs,geom=dataset_empty.psf.psf_map.geom,)
             
             #read in an unrelated Aeff for TELESCOP keyword
-            obs.aeff = RegionNDMap.read("data/120_ARF_00001.fits", format="ogip-arf") #needed for TELESCOP keywords
+            obs.aeff = RegionNDMap.read(os.path.dirname(os.path.abspath(__file__))+"/data/RMF_ARF/120_ARF_00001.fits", format="ogip-arf") #needed for TELESCOP keywords
             
             self.obs.append(obs)
             
             #run dataset maker
             if onoff:
-                dataset_empty = MapDatasetOnOff.create(geom=geom,energy_axis_true=e_true_axis,rad_axis=obs.psf.psf_map.geom.axes["rad"],name="msh"+str(val),binsz_irf=3*u.arcmin)
+                dataset_empty = MapDatasetOnOff.create(geom=geom,energy_axis_true=e_true_axis,rad_axis=obs.psf.psf_map.geom.axes["rad"],name="msh"+str(val),binsz_irf=(binsize_irf*u.arcmin).to("deg").value)
             else:
-                dataset_empty = MapDataset.create(geom=geom,energy_axis_true=e_true_axis,rad_axis=obs.psf.psf_map.geom.axes["rad"],name="msh"+str(val),binsz_irf=3*u.arcmin)
+                dataset_empty = MapDataset.create(geom=geom,energy_axis_true=e_true_axis,rad_axis=obs.psf.psf_map.geom.axes["rad"],name="msh"+str(val),binsz_irf=(binsize_irf*u.arcmin).to("deg").value)
 
             maker = MapDatasetMaker(selection=['counts','psf'] ,background_interp_missing_data=False)
             dataset = maker.run(dataset_empty, obs)
@@ -325,11 +332,11 @@ class eROdata:
                 counts_shift.data=np.roll(counts_shift.data,(1,1),axis=(-2,-1))
                 dataset.counts=counts_shift.downsample(int(pix_size/(pix_size_orig)),preserve_counts=True)
 
-            else:
+            #else:
                 # apply half-pixel shift to exposure
-                dataset.exposure=dataset.exposure.upsample(int(pix_size/(pix_size_orig)),preserve_counts=False)
-                dataset.exposure.data=np.roll(dataset.exposure.data,(1,1),axis=(-2,-1))
-                dataset.exposure=dataset.exposure.downsample(int(pix_size/(pix_size_orig)),preserve_counts=False)
+                #dataset.exposure=dataset.exposure.upsample(int(pix_size/(pix_size_orig)),preserve_counts=False)
+                #dataset.exposure.data=np.roll(dataset.exposure.data,(1,1),axis=(-2,-1))
+                #dataset.exposure=dataset.exposure.downsample(int(pix_size/(pix_size_orig)),preserve_counts=False)
                 
 
             dataset.edisp=EDispKernelMap.from_edisp_kernel(rmf,geom=dataset_empty.edisp.edisp_map.geom)
@@ -349,14 +356,16 @@ class eROdata:
                 dataset.background.data=np.zeros_like(dataset.counts.data)
 
             self.datasets.append(dataset)
-            continue
             
 
     def stack(self):
         stacked=self.datasets[0].copy()
+        back_spec=self.backgr_spectra[0].copy()
         for i in range(1,len(self.tms)):
             stacked.stack(self.datasets[i])
+            back_spec.stack(self.backgr_spectra[i])
         self.stacked=stacked
+        self.backgr_stacked=back_spec
 
     def background_spectrum(self,backgr,region=None,to_mask_out=None,on_off=False,exp=True,ext_mask=None):
         if self.datasets==None:
@@ -454,20 +463,22 @@ class eROdata:
                     self.datasets[i].acceptance_off=gammapy.maps.WcsNDMap(acc_off.geom, data=acc_off.data, unit="")
 
 
-    def write_to_files(self, filename=None,tms=None,stacked=False):
-        for i, val in enumerate(self.tms):
-            if filename:
-                filename1=filename.replace(".fits","_TM"+str(val)+".fits")
-            else:
-                filename1=self.out_path+"dataset_TM"+str(val)+".fits.gz"
-            if val in tms:
-                self.datasets[i].write(filename1, overwrite=True, checksum=False)
-                self.backgr_spectra[i].write(self.out_path+"background_TM"+str(val)+".fits.gz")
-            
+    def write_to_files(self, filename=None,tms=None,stacked=False,overwrite=True):
+        if tms:
+            for i, val in enumerate(self.tms):
+                if filename:
+                    filename1=filename.replace(".fits","_TM"+str(val)+".fits")
+                else:
+                    filename1=self.out_path+"dataset_TM"+str(val)+".fits.gz"
+                if val in tms:
+                    self.datasets[i].write(filename1, overwrite=True, checksum=False)
+                    self.backgr_spectra[i].write(filename.replace(".fits.gz","_backgr.fits.gz"), format="gadf", overwrite=True)
+                
         if stacked:
             if not filename:
                 filename=self.out_path+"dataset_stacked.fits.gz"
             self.stacked.write(filename, overwrite=True, checksum=False)
+            self.backgr_stacked.write(filename.replace(".fits.gz","_backgr.fits.gz"), format="gadf", overwrite=True)
 
 
 
@@ -486,13 +497,44 @@ def make_energy_mask(dataset,energy_bounds,reset=False):
 
     dataset.mask_safe.data = mask
 
-def to_spectrum_dataset_xray(self, on_region, containment_correction=False, name=None):
+def to_spectrum_dataset_xray(self, on_region, name=None):#, containment_correction=False, name=None):
+    #No longer works since 2.0:
+    #dataset = MapDataset.to_spectrum_dataset(self,
+    #    on_region=on_region,
+    #    containment_correction=containment_correction,
+    #    name=name,
+    #)
 
-    dataset = MapDataset.to_spectrum_dataset(self,
-        on_region=on_region,
-        containment_correction=containment_correction,
-        name=name,
-    )
+    name = make_name(name)
+    kwargs = {"gti": self.gti, "name": name, "meta_table": self.meta_table}
+
+    if self.mask_safe:
+        kwargs["mask_safe"] = self.mask_safe.to_region_nd_map(on_region, func=np.any)
+
+    if self.mask_fit:
+        kwargs["mask_fit"] = self.mask_fit.to_region_nd_map(on_region, func=np.any)
+
+    if self.counts:
+        kwargs["counts"] = self.counts.to_region_nd_map(
+            on_region, np.sum, weights=self.mask_safe
+        )
+
+    if self.stat_type == "cash" and self.background:
+        kwargs["background"] = self.npred_background().to_region_nd_map(
+            on_region, func=np.sum, weights=self.mask_safe
+        )
+
+    if self.exposure:
+        kwargs["exposure"] = None
+
+    if self.psf:
+        kwargs["psf"] = self.psf.to_region_nd_map(on_region)
+
+    if self.edisp is not None:
+        kwargs["edisp"] = self.edisp.to_region_nd_map(on_region)
+
+    dataset = SpectrumDataset(**kwargs)
+
     # correct all the mean:
 
     kwargs = {"name": name}
@@ -537,7 +579,7 @@ def to_spectrum_dataset_xray(self, on_region, containment_correction=False, name
     except:
         return dataset
 
-def wstat_rebin(self,n=1):
+def wstat_rebin(self,n=5):
         z=[0]
         x=0
 
@@ -554,14 +596,14 @@ def wstat_rebin(self,n=1):
                 x=0
 
         edges_new=[]
-        edges_old=self.counts.geom.axes["energy"].edges.value
+        edges_old=self.counts.geom.axes["energy"].edges#.value
         for i, val in enumerate(z):
-            edges_new.append(round(edges_old[int(val)],3))
-        edges_new.append(round(edges_old[-1],3))
+            edges_new.append(edges_old.value[int(val)])
+        edges_new.append(edges_old.value[-1])
 
-        energy_axis_new = MapAxis.from_edges(edges_new,name="energy", unit="keV", interp="log")
-        
-        self=self.resample_energy_axis(energy_axis_new)
+        energy_axis_new = MapAxis.from_edges(edges_new,name="energy", unit=edges_old.unit, interp="lin")
+
+        return self.resample_energy_axis(energy_axis_new)
 
 def rebin_energy_bounds(self,low_E=0.2*u.keV,high_E=10.0*u.keV):
         edges_new=[]
@@ -572,7 +614,7 @@ def rebin_energy_bounds(self,low_E=0.2*u.keV,high_E=10.0*u.keV):
         edges_new.insert(0,edges_old[0].value)
         edges_new.append(edges_old[-1].value)
 
-        energy_axis_new = MapAxis.from_edges(edges_new,name="energy", unit=edges_old.unit, interp="log")
+        energy_axis_new = MapAxis.from_edges(edges_new,name="energy", unit=edges_old.unit, interp="lin")
         
         return self.resample_energy_axis(energy_axis_new)
 
@@ -581,7 +623,7 @@ def to_lin(self):
     e_true_axis_lin = MapAxis.from_edges(edges=self.exposure.geom.axes["energy_true"].edges,unit="keV",name="energy_true",interp="lin")
     geom_lin=self.counts.geom.copy().replace_axis(energy_axis_lin)
 
-    if self.psf:
+    if self.psf and (type(self) not in [gammapy.datasets.spectrum.SpectrumDataset,gammapy.datasets.spectrum.SpectrumDatasetOnOff]):
         rad_axis=self.psf.psf_map.geom.copy().axes["rad"]
         binsz_irf=self.edisp.edisp_map.geom.pixel_scales[0]
         dataset_lin = type(self).create(geom=geom_lin,energy_axis_true=e_true_axis_lin,rad_axis=rad_axis,binsz_irf=binsz_irf)
@@ -593,12 +635,14 @@ def to_lin(self):
     #dataset_lin = type(self).create(geom=geom_lin,energy_axis_true=e_true_axis_lin,rad_axis=rad_axis,binsz_irf=binsz_irf)
 
     dataset_lin.counts.data=self.counts.data
-    try:
+    if type(self) in [gammapy.datasets.spectrum.MapDatasetOnOff,gammapy.datasets.spectrum.SpectrumDatasetOnOff]:
         dataset_lin.counts_off.data=self.counts_off.data
         dataset_lin.acceptance.data=self.acceptance.data
         dataset_lin.acceptance_off.data=self.acceptance_off.data
-    except:
+    elif self.background:
         dataset_lin.background.data=self.background.data
+    else:
+        pass
     try:
         dataset_lin.gti=self.gti.copy()
     except:
@@ -606,7 +650,7 @@ def to_lin(self):
     dataset_lin.exposure.data=self.exposure.data*((self.exposure.unit/dataset_lin.exposure.unit).decompose().scale)
     dataset_lin.edisp.edisp_map.data=self.edisp.edisp_map.data
     dataset_lin.edisp.exposure_map.data=self.edisp.exposure_map.data
-    if self.psf:
+    if self.psf and (type(self) not in [gammapy.datasets.spectrum.SpectrumDataset,gammapy.datasets.spectrum.SpectrumDatasetOnOff]):
         dataset_lin.psf.psf_map.data=self.psf.psf_map.data
         dataset_lin.psf.exposure_map.data=self.psf.exposure_map.data
     else:
@@ -618,7 +662,8 @@ def to_lin(self):
 def get_eRASS1_point_src(self,coord,radius,catalog_path):
     erass = Table(fits.open(catalog_path+"eRASS1_Main.v1.1.fits")[1].data)
     catalog=SkyCoord(ra=erass["RA"].data*u.deg,dec=erass["DEC"].data*u.deg)
-    idx1, idx2, sep, dist=catalog.search_around_sky(coord,radius*u.deg)
+    c = SkyCoord(ra=[coord.ra.to(u.deg).value]*u.degree, dec=[coord.dec.to(u.deg).value]*u.degree)
+    idx1, idx2, sep, dist=catalog.search_around_sky(c,radius*u.deg)
     return Regions([CircleSkyRegion(center=i,radius=30*u.arcsec) for i in catalog[idx2]])
 
 def export_pyxspec_model(outfile,name=""):
@@ -682,33 +727,40 @@ def import_erosita_background_model(filename, fwc=False, spatial=True, **kwargs)
         apply_irf=apply_irf,
     )
 
-def make_exclusion_mask(self,include=None, exclude=None, point_src_exclusion=True):
+def make_exclusion_mask(self,include=None, exclude=None, point_src_exclusion=True, catalog_path=None):
     # make exclusion mask
     regions = []
     if point_src_exclusion:
-        regions=get_eRASS1_point_src(self,self.counts.geom.center_skydir,max(self.counts.geom.width)*sqrt(2))
+        if not catalog_path:
+            raise ValueError('Path to eRASS1 catalog needed, if point source exclusion should be performed.')
+        else:
+            regions=get_eRASS1_point_src(self,self.counts.geom.center_skydir,np.max(self.counts.geom.width).value*np.sqrt(2),catalog_path=catalog_path)
     if exclude:
         regions.extend(exclude)
+    
+    geom = self._geom
+    
     mask_exclude= ~geom.region_mask(regions)
 
+    if include:
     # make inclusion mask
-    mask_include= ~geom.region_mask(include)
+        mask_include= geom.region_mask(include)
+        data_and=np.logical_and(mask_exclude.data,mask_include.data)
+        mask_exclude.data=data_and
 
-    data_and=np.logical_and(mask_exclude.data,mask_include.data)
-    mask_include.data=data_and
-    return mask_include
+    return mask_exclude
 
-def fit_erosita_background(dataset):
+def fit_erosita_background(dataset,tm="stacked"):
     # fit FWC model in 6 to 9 keV range
-    fwc=import_erosita_background_model("data/backgr_FWC_model_DR1.txt",fwc=True)
+    fwc=import_erosita_background_model(os.path.dirname(os.path.abspath(__file__))+"/data/FWC_models/backgr_FWC_model_DR1_"+str(tm)+".txt",fwc=True)
     dataset.models=[fwc]
-    make_energy_mask(msh2,[6.0,9.0]*u.keV)
+    make_energy_mask(dataset,[6.0,9.0]*u.keV)
     fit = Fit()
     result = fit.run(datasets=[dataset])
     fwc.parameters["norm"].frozen=True
 
     # define model for diffuse background (to be changed to YAML file)
-    area_arcmin=msh2.counts.geom.region.to_pixel(msh2.counts.geom.wcs).area*(msh2.counts.geom.binsz_wcs[0]**2).to(u.arcmin**2)
+    area_arcmin=dataset.counts.geom.region.to_pixel(dataset.counts.geom.wcs).area*(dataset.counts.geom.binsz_wcs[0]**2).to(u.arcmin**2)
     from sherpa.astro.xspec import XSTBabs,XSapec,XSpowerlaw,XSParameter, XSgaussian, XSexpfac, XSParameter, XSbkn2pow, XSvnei, XSconstant
     from sherpa.models import parameter
     from sherpa.astro import xspec
@@ -777,7 +829,7 @@ def fit_erosita_background(dataset):
     cxb_sherpa.pars[-1].freeze()
     
     spectral_model_sherpa=const_sherpa*(lhb_sherpa + absorption_sherpa*(cgm_sherpa+cor_sherpa +cxb_sherpa))
-    spectral_model = SherpaSpectralModel(spectral_model_sherpa2)
+    spectral_model = SherpaSpectralModel(spectral_model_sherpa)
     
     manual_bkg = SkyModel(spectral_model=spectral_model,name="manual_bkg")
 
