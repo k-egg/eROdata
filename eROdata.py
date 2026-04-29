@@ -424,7 +424,7 @@ class eROdata:
             
             backgr.datasets[j].mask_safe=mask
 
-            area_factor=np.sum(mask.data[0])
+            area_factor=np.sum(mask.data[0])*(backgr.datasets[j].counts.geom.cdelt/self.datasets[j].counts.geom.cdelt).decompose().value
             #print(data_and[0])
     
             #Extract spectrum:
@@ -569,7 +569,6 @@ def to_spectrum_dataset_xray(self, on_region, name=None):#, containment_correcti
         
         acceptance_off = self.acceptance_off.get_spectrum(on_region, np.sum, weights=self.mask_safe)#kwargs["acceptance"] * kwargs["counts_off"] / norm
         area_factor = self.mask_safe.get_spectrum(on_region, np.sum, weights=self.mask_safe)
-        print(area_factor.data)
         #acceptance_off.data = np.nan_to_num(np.divide(acceptance_off.data,(area_factor.data)))
         acceptance_off.data = np.nan_to_num(np.divide(acceptance_off.data,(area_factor.data*area_factor.data)))
         #np.nan_to_num(acceptance_off.data, copy=False)
@@ -861,8 +860,13 @@ def fit_erosita_background(dataset,tm="stacked"):
 
     print(result)
 
+def erosita_background_to_template(model, energy_range=[0.1*u.keV,10.5*u.keV]):
+    energies = np.linspace(energy_range[0],energy_range[1],2000)
+    values = model.spectral_model(energies)
 
-
+    t = TemplateSpectralModel(energy = energies, values = values)
+    bkg = SkyModel(spectral_model=t*PowerLawNormSpectralModel(),spatial_model=ConstantSpatialModel(),name="bkg")
+    return bkg
 
 
 

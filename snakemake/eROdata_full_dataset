@@ -4,11 +4,11 @@ from eROdata import *
 
 #calculate quantities
 
-downsample_exp=int(exp_bin/4)
-downsample_psf=int(psf_bin/4)
+downsample_exp=int(exp_bin/evt_bin)
+downsample_psf=int(psf_bin/evt_bin)
 
 width=float(source_reg[source_reg.rfind(",")+1:source_reg.rfind(")")].strip())*2
-pix=int(width*3600/4)
+pix=int(width*3600/evt_bin)
 x_list=list(range(0,pix,downsample_exp))
 x_min=min(x_list)
 x_max=max(x_list)+downsample_exp
@@ -62,19 +62,19 @@ rule make_datasets:
 
         for i,val in enumerate(tms):
             data_src=eROdata(evtfile_list,\
-                 bg_reg,\
+                 fg_reg,\
                  out_path,tms=[val], pointed=pointed, catalog_path=catalog_path)
             data_src.find_data_products()
             data_src.load_data(wid=width_bg,binsize=evt_bin,binsize_irf=binsize_irf, srctool_like=srctool_like)
 
-            #data_bkg=eROdata(evtfile_list,\
-            #     bg_reg,\
-            #     out_path,tms=[val],pointed=pointed, catalog_path=catalog_path)
-            #data_bkg.find_data_products()
-            #data_bkg.load_data(wid=width_bg,binsize=evt_bin,binsize_irf=binsize_irf, srctool_like=srctool_like)
+            data_bkg=eROdata(evtfile_list,\
+                 bg_reg,\
+                 out_path,tms=[val],pointed=pointed, catalog_path=catalog_path)
+            data_bkg.find_data_products()
+            data_bkg.load_data(wid=width_bg,binsize=evt_bin*4,binsize_irf=600, srctool_like=srctool_like)
                
             data_src.background_spectrum(data_src, data_src.region,ext_mask=bkg_ext_mask,to_mask_out=bkg_exclude_reg,on_off=on_off,exp=bkg_weighting_exp)
-            data_src.datasets[0] = data_src.datasets[0].cutout(data_src.region.center,width_fg*u.deg)
+            #data_src.datasets[0] = data_src.datasets[0].cutout(data_src.region.center,width_fg*u.deg)
 
             if output_stacked:
                 if i==0:
