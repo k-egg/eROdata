@@ -21,7 +21,7 @@ def get_output_list():
         expand("{out_path}quantized_arf_exp_b{downsample}_{tm}.fits.gz",out_path=out_path,downsample=downsample_exp,tm=tms),\
         ]
     if not pointed:
-        l.append(expand("{out_path}psfmap_{tm}.fits",out_path=out_path,tm=tms))
+        l.append(expand("{out_path}psfmap_{tm}.fits.gz",out_path=out_path,tm=tms))
     return l
 
 
@@ -33,7 +33,7 @@ rule all:
         #evtfile_conv=expand("{out_path}evt_TM{tm}_conv.fits",out_path=out_path,tm=tms),
         #exp_t_map=expand("{out_path}expmap_TM{tm}.fits",out_path=out_path,tm=tms),
         #expmap=expand("{out_path}quantized_arf_exp_b{downsample}_{tm}.fits.gz",out_path=out_path,downsample=downsample_exp,tm=tms),
-        #psf_map=expand("{out_path}psfmap_{tm}.fits",out_path=out_path,tm=tms)
+        #psf_map=expand("{out_path}psfmap_{tm}.fits.gz",out_path=out_path,tm=tms)
 
 rule make_evtfiles_exp_t_maps:
     output:
@@ -101,7 +101,7 @@ rule make_arf_map:
 
 rule make_psf_map:
     output:
-        expand("{out_path}psfmap_{{tm}}.fits" ,out_path=out_path,tm=tms)
+        expand("{out_path}psfmap_{{tm}}.fits.gz" ,out_path=out_path,tm=tms)
     input:
         expand("{out_path}evt_TM{{tm}}.fits" ,out_path=out_path,tm=tms)
     wildcard_constraints:
@@ -116,7 +116,8 @@ rule make_psf_map:
         python3 {eROdata_path}make_psfmap.py \
         --evtfile={out_path}evt_TM{wildcards.tm}.fits \
         --tm={wildcards.tm} \
-        --outfile={out_path}psfmap_{wildcards.tm}.fits \
-        --downsample={downsample_psf}
+        --outfile={out_path}psfmap_{wildcards.tm}.fits.gz \
+        --downsample={downsample_psf}\
+        --downsample_time={psf_downsample_time}
        '''
     

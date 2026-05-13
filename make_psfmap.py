@@ -33,13 +33,13 @@ from astropy.wcs import WCS
 import argparse
 from gammapy.maps.wcs.geom import get_resampled_wcs
 
-def make_psfmap(evtfile,tm, outfile,downsample=1):
+def make_psfmap(evtfile,tm, outfile,downsample=1,downsample_time=1):
     
     #read table of pointing positions from event file
     #(integrating readPointing into this function for convenience):
     
     hdul=fits.open(evtfile)
-    P_table = np.array(hdul["CORRATT"+str(tm)].data.tolist())[:,1:3]
+    P_table = np.array(hdul["CORRATT"+str(tm)].data.tolist())[::downsample_time,1:3]
     
     img_dim_x = int(hdul[0].shape[0]/downsample)
     img_dim_y = int(hdul[0].shape[1]/downsample)
@@ -175,9 +175,10 @@ if __name__=="__main__":
     parser.add_argument("--outfile", required=True, type=str, help="Output filepath for PSFMap")
 
     parser.add_argument("--downsample", required=False, type=int, help="Factor for downsampling of PSFMap")
+    parser.add_argument("--downsample_time", required=False, type=int, help="Factor for downsampling the time axis of the PSFMap")
 
     
     args = parser.parse_args()
 
-    make_psfmap(args.evtfile,args.tm,args.outfile,args.downsample)    
+    make_psfmap(args.evtfile,args.tm,args.outfile,args.downsample,args.downsample_time)    
 

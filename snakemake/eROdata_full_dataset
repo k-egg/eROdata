@@ -33,7 +33,7 @@ def get_output_list():
         expand("{out_path}quantized_arf_exp_b{downsample}_{tm}.fits.gz",out_path=out_path,downsample=downsample_exp,tm=tms),\
         ]
     if not pointed:
-        l.append(expand("{out_path}psfmap_{tm}.fits",out_path=out_path,tm=tms))
+        l.append(expand("{out_path}psfmap_{tm}.fits.gz",out_path=out_path,tm=tms))
     return l
 
 
@@ -65,7 +65,7 @@ rule make_datasets:
                  fg_reg,\
                  out_path,tms=[val], pointed=pointed, catalog_path=catalog_path)
             data_src.find_data_products()
-            data_src.load_data(wid=width_bg,binsize=evt_bin,binsize_irf=binsize_irf, srctool_like=srctool_like)
+            data_src.load_data(wid=width_fg,binsize=evt_bin,binsize_irf=binsize_irf, srctool_like=srctool_like)
 
             data_bkg=eROdata(evtfile_list,\
                  bg_reg,\
@@ -164,7 +164,7 @@ rule make_arf_map:
 
 rule make_psf_map:
     output:
-        expand("{out_path}psfmap_{{tm}}.fits" ,out_path=out_path,tm=tms)
+        expand("{out_path}psfmap_{{tm}}.fits.gz" ,out_path=out_path,tm=tms)
     input:
         expand("{out_path}evt_TM{{tm}}.fits" ,out_path=out_path,tm=tms)
     wildcard_constraints:
@@ -179,7 +179,8 @@ rule make_psf_map:
         python3 {eROdata_path}make_psfmap.py \
         --evtfile={out_path}evt_TM{wildcards.tm}.fits \
         --tm={wildcards.tm} \
-        --outfile={out_path}psfmap_{wildcards.tm}.fits \
-        --downsample={downsample_psf}
+        --outfile={out_path}psfmap_{wildcards.tm}.fits.gz \
+        --downsample={downsample_psf}\
+        --downsample_time={psf_downsample_time}
        '''
     
