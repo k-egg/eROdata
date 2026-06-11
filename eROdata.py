@@ -1,7 +1,7 @@
 from make_psfmap import *
 from make_exposure_1 import *
 from make_exposure_2 import *
-from SherpaSpectralModel import *
+#from SherpaSpectralModel import *
 
 #from SkyModel_unit_fix import *
 
@@ -50,6 +50,8 @@ import numpy as np
 from gammapy.modeling.models import SpectralModel
 from gammapy.modeling import Parameter, Parameters
 
+import sys
+sys.setrecursionlimit(20000)
 
 def Evtfile_converter(evtfile,TM, add_pointing=None, suffix=None):
     if suffix==None:
@@ -421,7 +423,7 @@ class eROdata:
             
             backgr.datasets[j].mask_safe=mask
 
-            area_factor=np.sum(mask.data[0])*(backgr.datasets[j].counts.geom.cdelt/self.datasets[j].counts.geom.cdelt).decompose().value
+            area_factor=np.sum(mask.data[0])*(backgr.datasets[j].counts.geom._cdelt[0]/self.datasets[j].counts.geom._cdelt[0])#.decompose().value
             #print(data_and[0])
     
             #Extract spectrum:
@@ -469,7 +471,7 @@ class eROdata:
                     filename1=self.out_path+"dataset_TM"+str(val)+".fits.gz"
                 if val in tms:
                     self.datasets[i].write(filename1, overwrite=True, checksum=False)
-                    self.backgr_spectra[i].write(filename.replace(".fits.gz","_backgr.fits.gz"), format="gadf", overwrite=True)
+                    self.backgr_spectra[i].write(filename1.replace(".fits.gz","_backgr.fits.gz"), format="gadf", overwrite=True)
 
         if stacked:
             if not filename:
@@ -754,6 +756,7 @@ def fit_erosita_background(dataset,tm="stacked"):
 
     # define model for diffuse background (to be changed to YAML file)
     area_arcmin=dataset.counts.geom.region.to_pixel(dataset.counts.geom.wcs).area*(dataset.counts.geom.binsz_wcs[0]**2).to(u.arcmin**2)
+    from gammapy_mwl.models.sherpa import SherpaSpectralModel
     from sherpa.astro.xspec import XSTBabs,XSapec,XSpowerlaw,XSParameter, XSgaussian, XSexpfac, XSParameter, XSbkn2pow, XSvnei, XSconstant
     from sherpa.models import parameter
     from sherpa.astro import xspec
