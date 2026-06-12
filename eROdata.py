@@ -1,3 +1,4 @@
+# Licensed under a 3-clause BSD style license - see LICENSE.rst
 from make_psfmap import *
 from make_exposure_1 import *
 from make_exposure_2 import *
@@ -756,7 +757,8 @@ def fit_erosita_background(dataset,tm="stacked"):
 
     # define model for diffuse background (to be changed to YAML file)
     area_arcmin=dataset.counts.geom.region.to_pixel(dataset.counts.geom.wcs).area*(dataset.counts.geom.binsz_wcs[0]**2).to(u.arcmin**2)
-    from gammapy_mwl.models.sherpa import SherpaSpectralModel
+    #from gammapy_mwl.models.sherpa import SherpaSpectralModel
+    from SherpaSpectralModel import SherpaSpectralModel
     from sherpa.astro.xspec import XSTBabs,XSapec,XSpowerlaw,XSParameter, XSgaussian, XSexpfac, XSParameter, XSbkn2pow, XSvnei, XSconstant
     from sherpa.models import parameter
     from sherpa.astro import xspec

@@ -1,3 +1,4 @@
+# Licensed under a 3-clause BSD style license - see LICENSE.rst
 evtfile_list= #path to txt file list of eventfiles
 source_reg="fk5;circle(228.5338154,-59.1935136,0.7)" #ds9 region encompassing both fg and bkg data
 
