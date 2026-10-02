@@ -10,7 +10,7 @@ downsample_psf=int(psf_bin/evt_bin)
 
 width=float(source_reg[source_reg.rfind(",")+1:source_reg.rfind(")")].strip())*2
 pix=int(width*3600/evt_bin)
-x_list=list(range(0,pix,downsample_exp))
+x_list=list(range(0,pix-int(downsample_exp/2),downsample_exp))
 x_min=min(x_list)
 x_max=max(x_list)+downsample_exp
 y=x_list
@@ -74,7 +74,7 @@ rule make_datasets:
             data_bkg.find_data_products()
             data_bkg.load_data(wid=width_bg,binsize=evt_bin*4,binsize_irf=600, srctool_like=srctool_like)
                
-            data_src.background_spectrum(data_src, data_src.region,ext_mask=bkg_ext_mask,to_mask_out=bkg_exclude_reg,on_off=on_off,exp=bkg_weighting_exp)
+            data_src.background_spectrum(data_bkg, data_bkg.region,ext_mask=bkg_ext_mask,to_mask_out=bkg_exclude_reg,on_off=on_off,exp=bkg_weighting_exp)
             #data_src.datasets[0] = data_src.datasets[0].cutout(data_src.region.center,width_fg*u.deg)
 
             if output_stacked:
@@ -113,7 +113,7 @@ rule make_evtfiles_exp_t_maps:
         data_src=eROdata(evtfile_list,\
                  source_reg,\
                  out_path,tms=tms,pointed=pointed, catalog_path=catalog_path)
-        data_src.eSASS_data_products()
+        data_src.eSASS_data_products(evt_binsize=evt_bin)
 
 rule make_arfs:
     input:

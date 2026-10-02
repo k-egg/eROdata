@@ -32,7 +32,7 @@ srctool_like=False #only necessary for exact agreement with srctool
 #more detailed options:
 
 bkg_ext_mask=None #External mask to exclude from background?
-bkg_exclude_reg="fk5;circle(228.3789225,-59.0181796,0.0832210)" #Additional region to exclude from background?
+bkg_exclude_reg="fk5;circle(228.5338154,-59.1935136,0.7) fk5;circle(228.3789225,-59.0181796,0.0832210)" #Additional region to exclude from background? Don't forget to exclude the source region!
 bkg_weighting_exp=True #Bkg weighted by exposure time (True) or full exposure (False)? Important for pointed data.
 binsize_irf=3 #arcmin, Change PSF & EDisp binning in dataset
 
@@ -42,13 +42,13 @@ runtime_make_evtfiles = 20 #min
 mem_mb_make_evtfiles = 5000 #MB
 
 runtime_make_arfs = 120 #min
-mem_mb_make_arfs = 5000 #MB
+mem_mb_make_arfs = 1000 #MB
 
 runtime_make_arf_map = 120 #min
-mem_mb_make_arf_map = 20000 #MB
+mem_mb_make_arf_map = 5000 #MB
 
 runtime_make_psf_map = 180 #min
 mem_mb_make_psf_map = 5000 #MB
 
 runtime_make_datasets = 120 #min
-mem_mb_make_datasets = 200000 #MB
+mem_mb_make_datasets = 20000 #MB

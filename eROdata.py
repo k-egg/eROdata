@@ -153,7 +153,7 @@ class eROdata:
             regions.write(self.out_path+"point_src_list.reg", overwrite=True)
             return regions
     
-    def eSASS_data_products(self):
+    def eSASS_data_products(self,evt_binsize=8):
         # generate eventfiles and expmaps for all TMs
         txt_file=self.txt_file
         reg=self.ds9_reg
@@ -172,14 +172,14 @@ class eROdata:
         x="auto"
         for n,i in enumerate(self.tms):
             self.evtfiles.append(out_path+"evt_TM"+str(i)+".fits")
-            cmd=["evtool", "eventfiles=@"+txt_file, "outfile= "+out_path+"evt_TM"+str(i)+".fits", "image=yes", "rebin=80","pattern=15", "size="+str(x), "gti=FLAREGTI", "center_position= auto","flag=0xc00f7f30","repair_gtis=yes","region="+reg,"telid="+str(i)]
+            cmd=["evtool", "eventfiles=@"+txt_file, "outfile= "+out_path+"evt_TM"+str(i)+".fits", "image=yes", "rebin="+str(evt_binsize*20),"pattern=15", "size="+str(x), "gti=FLAREGTI", "center_position= auto","flag=0xc00f7f30","repair_gtis=yes","region="+reg,"telid="+str(i)]
             subprocess.run(cmd)
             if n==0:
                 hdu = fits.open(out_path+"evt_TM"+str(i)+".fits")[0]
                 img=hdu.data
                 x=max(img.shape[0],img.shape[1])
                 x=round(x/10)*10
-                cmd=["evtool", "eventfiles=@"+txt_file, "outfile= "+out_path+"evt_TM"+str(i)+".fits", "image=yes", "rebin=80","pattern=15", "size="+str(x), "gti=FLAREGTI", "center_position= auto","flag=0xc00f7f30","repair_gtis=yes","region="+reg,"telid="+str(i)]
+                cmd=["evtool", "eventfiles=@"+txt_file, "outfile= "+out_path+"evt_TM"+str(i)+".fits", "image=yes", "rebin="+str(evt_binsize*20),"pattern=15", "size="+str(x), "gti=FLAREGTI", "center_position= auto","flag=0xc00f7f30","repair_gtis=yes","region="+reg,"telid="+str(i)]
                 subprocess.run(cmd)
             Evtfile_converter(self.evtfiles[n],i,pnt,suffix="_conv")
             self.evtfiles_conv.append(self.evtfiles[n].replace(".fits","")+"_conv.fits")

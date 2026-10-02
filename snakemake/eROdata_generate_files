@@ -10,7 +10,7 @@ downsample_psf=int(psf_bin/4)
 
 width=float(source_reg[source_reg.rfind(",")+1:source_reg.rfind(")")].strip())*2
 pix=int(width*3600/4)
-x_list=list(range(0,pix,downsample_exp))
+x_list=list(range(0,pix-int(downsample_exp/2),downsample_exp))
 x_min=min(x_list)
 x_max=max(x_list)+downsample_exp
 y=x_list
@@ -50,7 +50,7 @@ rule make_evtfiles_exp_t_maps:
         data_src=eROdata(evtfile_list,\
                  source_reg,\
                  out_path,tms=tms,pointed=pointed, catalog_path=catalog_path)
-        data_src.eSASS_data_products()
+        data_src.eSASS_data_products(evt_binsize=evt_bin)
 
 rule make_arfs:
     input:
