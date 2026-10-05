@@ -55,6 +55,26 @@ import sys
 sys.setrecursionlimit(20000)
 
 def Evtfile_converter(evtfile,TM, add_pointing=None, suffix=None):
+    """
+    Convert eROSITA calibrated eventfiles to a Gammapy-compatible format.
+
+    If a suffix is given the new file will be written to "<filename>_<suffix>.fits".
+    Otherwise the original file is overwritten.
+
+     Parameters
+    ----------
+    evtfile : str
+        Location of eventfile to be converted.
+    TM : int
+        eROSITA TM of the eventfile.
+    add_pointing : bool
+        Whether to add an artificial pointing direction to the eventfile.
+        Set to True for survey data.
+    suffix : str
+        Suffix to append to filename of converted file.
+        If none is given, the original file is overwritten.
+    """
+
     if suffix==None:
         suffix=""
     # create output filename
@@ -96,6 +116,19 @@ def Evtfile_converter(evtfile,TM, add_pointing=None, suffix=None):
     print("Eventfile successfully converted!")
 
 def RMF_converter(rmf_file, suffix=None):
+    """
+    Convert an eROSITA RMF file to a Gammapy-compatible format.
+
+    If a suffix is given the new file will be written to "<filename>_<suffix>.fits".
+    Otherwise the original file is overwritten.
+
+     Parameters
+    ----------
+    suffix : str
+        Suffix to append to filename of converted file.
+        If none is given, the original file is overwritten.
+    """
+
     # open file and get matrix and energy bounds data
     rmf_hdulist = fits.open(rmf_file)
     
@@ -117,9 +150,26 @@ def RMF_converter(rmf_file, suffix=None):
 
 
 class eROdata:
-    '''
-    Container for creating eROSITA dataset in Gammapy.
-    '''
+    """
+    Container for creating an eROSITA dataset in Gammapy.
+    Compiles all necessary data and steps for creating an eROSITA dataset in Gammapy.
+
+     Parameters
+    ----------
+    txt_file : str
+        Location of txt-file containing the paths to all eROSITA eventfiles covering the
+        region of interest.
+    reg_file: str
+        Location of ds9 region file containing the region of interest.
+    out_path: str
+        Path to directory in which data products will be written.
+    tms: list of int
+        All TMs that are used in the dataset process.
+    pointed: bool
+        Whether the data is from a pointed observation. Set to True if yes.
+    catalog_path: str
+        File path to the eROSITA DR1 Main catalog.
+    """
     def __init__(self,txt_file,reg_file,out_path,tms=[1,2,3,4,6],pointed=False,catalog_path=""):
         self.txt_file=txt_file
         #allow for both region strings and region files
@@ -141,6 +191,7 @@ class eROdata:
         self.catalog_path=catalog_path
 
     def get_eRASS1_point_src(self):
+        """Get list of eRASS1 point sources in the region of interest."""
         try:
             ds9_reg=Regions.read(self.out_path+"point_src_list.reg", format='ds9')
             return ds9_reg
@@ -154,6 +205,14 @@ class eROdata:
             return regions
     
     def eSASS_data_products(self,evt_binsize=8):
+        """
+        Generate eventfiles and exposure maps for the region of interest.
+
+        Parameters
+        ----------
+        evt_binsize : int
+            Bin size used for the events data in arcsec. Use multiples of 4.
+        """
         # generate eventfiles and expmaps for all TMs
         txt_file=self.txt_file
         reg=self.ds9_reg
@@ -190,6 +249,7 @@ class eROdata:
             subprocess.run(cmd_exp)
     
     def find_data_products(self):
+        """Find already created data products."""
         # find already created data products
         self.evtfiles=[]
         self.expmaps=[]
@@ -424,7 +484,7 @@ class eROdata:
             
             backgr.datasets[j].mask_safe=mask
 
-            area_factor=np.sum(mask.data[0])*(backgr.datasets[j].counts.geom._cdelt[0]/self.datasets[j].counts.geom._cdelt[0])#.decompose().value
+            area_factor=np.sum(mask.data[0])*((backgr.datasets[j].counts.geom._cdelt[0]/self.datasets[j].counts.geom._cdelt[0])**2)#.decompose().value
             #print(data_and[0])
     
             #Extract spectrum:
